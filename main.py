@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 from pwd_gen import random_pwd
 import pyperclip
+import json
 
 PADLOCK_ICON = "\U0001F512"
 HEIGHT_AMOUNT = 200
@@ -21,12 +22,16 @@ number_count = 0
 symbol_count = 0
 
 # ---------------------------- PASSWORD GENERATOR ------------------------------- #
+
+
 def generate_random_password():
     random_password = random_pwd()
     pyperclip.copy(random_password)
     password_sv.set(random_password)
 
 # ---------------------------- SAVE PASSWORD ------------------------------- #
+
+
 def pwd_strength(key):
     global pwd_length, strPassword
     entered_password = strPassword
@@ -73,7 +78,7 @@ def pwd_strength(key):
 
 def save_password():
     global DELIMITER
-    strWebsite = entryWebsite.get()
+    strWebsite = entryWebsite.get().title()
     strLogin = entryLogin.get()
     strPassword = entryPwd.get()
 
@@ -84,20 +89,59 @@ def save_password():
         # Proceed with save attempt
         password_details = [strWebsite, strLogin, strPassword]
         password_details_string = DELIMITER.join(password_details)
+        password_details_json = {
+            strWebsite: {
+                "Login": strLogin,
+                "Password": strPassword
+            }
+        }
 
         # Ask user to confirm save attempt
         q_ans = messagebox.askyesno(title=f"{PADLOCK_ICON} Password Manager", \
                             message=f"Are you sure you want to add these details?\n{password_details_string}")
         if q_ans:
             # Proceed with save
-            with open("password_manager.txt", "a") as file:
-                file.write(password_details_string+"\n")
+            try:
+                with open("password_manager.json", "r") as file:
+                    # Read old data
+                    data = json.load(file)
+                    # Update data
+                    data.update(password_details_json)
+            except json.JSONDecodeError:
+                data = password_details_json
+            except FileNotFoundError:
+                data = password_details_json
+            finally:
+                with open("password_manager.json", "w") as file:
+                    json.dump(data, file, indent=4)
+
+                # file.write(password_details_string+"\n")
             #Clear inputs
             entryWebsite.delete(0, tk.END)
             entryPwd.delete(0, tk.END)
             # Only clear login entry if a default email is not specified
             if len(DEFAULT_EMAIL) == 0:
                 entryLogin.delete(0, tk.END)
+# ---------------------------- RETRIEVE PASSWORD ------------------------------- #
+
+
+def retrieve_details():
+    search_field = entryWebsite.get().title()
+    try:
+        with open("password_manager.json", "r") as file:
+            password_manager_data = json.load(file)
+            try:
+                password_details = password_manager_data[search_field]
+            except KeyError:
+                messagebox.showerror(title=f"{PADLOCK_ICON} Password Manager", \
+                                     message="An entry has not been added for this website!")
+            else:
+                messagebox.showinfo(title=f"{PADLOCK_ICON} Password Manager", \
+                                    message=f"Website: {search_field}\nLogin: {password_details['Login']}\nPassword: {password_details['Password']}")
+    except FileNotFoundError:
+        messagebox.showerror(title=f"{PADLOCK_ICON} Password Manager", \
+                             message="Password Manager file can't be found!")
+
 # ---------------------------- UI SETUP ------------------------------- #
 
 
@@ -133,17 +177,20 @@ lblPwd.grid(column=0, row=3, padx=10, pady=10)
 # Entry Boxes
 # -----------------------------------------
 entryWebsite = tk.Entry(width=35)
-entryWebsite.grid(column=1, row=1, columnspan=2, sticky="W")
+entryWebsite.grid(column=1, row=1, sticky="W")
 # -----------------------------------------
 entryLogin = tk.Entry(width=35)
 entryLogin.insert(0,DEFAULT_EMAIL)
 entryLogin.grid(column=1, row=2, columnspan=2, sticky="W")
 # -----------------------------------------
+
+
 def set_pwd(var):
     global strPassword
     strPassword = var.get()
     pwd_strength(var)
     # print(strPassword)
+
 
 password_sv = tk.StringVar()
 password_sv.trace('w', lambda nm, idx, mode, var=password_sv: set_pwd(var))
@@ -157,6 +204,10 @@ buttonGenPwd.grid(column=2, row=3)
 # -----------------------------------------
 buttonAdd = tk.Button(text="Add", width=36, command=save_password)
 buttonAdd.grid(column=1, row=5, columnspan=2, sticky="W")
+# -----------------------------------------
+buttonRetrieve = tk.Button(text="Retrieve Details", command=retrieve_details)
+buttonRetrieve.grid(column=2, row=1, sticky="W")
+
 
 # Set focus to first entry box
 entryWebsite.focus_set()
